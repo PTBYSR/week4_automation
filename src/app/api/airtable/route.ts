@@ -67,6 +67,13 @@ export async function GET(request: NextRequest) {
     // Build the response
     const result: any = { status };
 
+    // Always include per-platform post statuses if they exist
+    result.postStatus = {
+      Newsletter: fields["Newsletter Post Status"] || "",
+      X: fields["X Post Status"] || "",
+      LinkedIn: fields["Linkedin Post Status"] || "",
+    };
+
     // When status is "waiting_for_selection", parse and include the draft data
     if (status === "waiting_for_selection" && fields["Raw WH Response"]) {
       try {
@@ -104,5 +111,59 @@ export async function GET(request: NextRequest) {
       { error: "Internal server error during Airtable polling" },
       { status: 500 }
     );
+  }
+}
+
+// ─── PATCH: Update platform post status columns ─────────────────
+export async function PATCH(request: NextRequest) {
+  const body = await request.json();
+  const { request_id, fields: updateFields } = body;
+
+  if (!request_id || !updateFields) {
+    return NextResponse.json(
+      { error: "Missing request_id or fields" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // First, find the record by request_id
+    const formula = encodeURIComponent(`{Request ID}='${request_id}'`);
+    const findUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}?filterByFormula=${formula}&maxRecords=1`;
+
+    const findRes = await fetch(findUrl, {
+      headers: { Authorization: `Bearer ${AIRTABLE_PAT}` },
+      cache: "no-store",
+    });
+
+    const findData = await findRes.json();
+    if (!findData.records || findData.records.length === 0) {
+      return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    const recordId = findData.records[0].id;
+
+    // Now PATCH the record
+    const patchUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}/${recordId}`;
+    const patchRes = await fetch(patchUrl, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_PAT}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fields: updateFields }),
+    });
+
+    if (!patchRes.ok) {
+      const errorText = await patchRes.text();
+      console.error("Airtable PATCH error:", errorText);
+      return NextResponse.json({ error: "Failed to update Airtable", details: errorText }, { status: 500 });
+    }
+
+    console.log(`[SERVER AIRTABLE] Cleared post statuses for ${request_id}`);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Airtable PATCH error:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

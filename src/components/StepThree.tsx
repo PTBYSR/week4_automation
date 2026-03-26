@@ -21,6 +21,11 @@ const platformMeta: Record<
   Newsletter: { icon: "✉", label: "Email Newsletter" },
 };
 
+type PlatformState = {
+  phase: "idle" | "loading" | "published" | "error";
+  message: string;
+};
+
 export default function StepThree({
   requestId,
   copies,
@@ -29,11 +34,11 @@ export default function StepThree({
 }: StepThreeProps) {
   const [editedCopies, setEditedCopies] = useState<SocialCopy[]>(copies);
   const [platformStatus, setPlatformStatus] = useState<
-    Record<string, "idle" | "loading" | "published">
+    Record<string, PlatformState>
   >({
-    X: "idle",
-    LinkedIn: "idle",
-    Newsletter: "idle",
+    X: { phase: "idle", message: "" },
+    LinkedIn: { phase: "idle", message: "" },
+    Newsletter: { phase: "idle", message: "" },
   });
 
   const updateCopy = (index: number, content: string) => {
@@ -47,14 +52,40 @@ export default function StepThree({
     action: "publish" | "schedule",
     content: string
   ) => {
-    setPlatformStatus((prev) => ({ ...prev, [platform]: "loading" }));
-    await publishToPlatform(requestId, platform, action, content);
-    setPlatformStatus((prev) => ({ ...prev, [platform]: "published" }));
+    setPlatformStatus((prev) => ({
+      ...prev,
+      [platform]: { phase: "loading", message: "Loading..." },
+    }));
+
+    await publishToPlatform(
+      requestId,
+      platform,
+      action,
+      content,
+      (message: string) => {
+        let phase: PlatformState["phase"] = "loading";
+        if (message === "Published") phase = "published";
+        if (message === "ERROR") phase = "error";
+        setPlatformStatus((prev) => ({
+          ...prev,
+          [platform]: { phase, message },
+        }));
+      }
+    );
+
+    // Only force published if the callback didn't already set error
+    setPlatformStatus((prev) => {
+      if (prev[platform].phase === "error") return prev;
+      return {
+        ...prev,
+        [platform]: { phase: "published", message: "Published" },
+      };
+    });
   };
 
-  const allPublished = platformStatus.X === "published" && 
-                       platformStatus.LinkedIn === "published" && 
-                       platformStatus.Newsletter === "published";
+  const allPublished = platformStatus.X.phase === "published" && 
+                       platformStatus.LinkedIn.phase === "published" && 
+                       platformStatus.Newsletter.phase === "published";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -84,7 +115,7 @@ export default function StepThree({
                 <span className="text-sm font-medium text-black">
                   {meta.label}
                 </span>
-                {status === "published" && (
+                {status.phase === "published" && (
                   <span className="ml-auto inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
                     Done
                   </span>
@@ -94,16 +125,16 @@ export default function StepThree({
                 <textarea
                   value={copy.content}
                   onChange={(e) => updateCopy(idx, e.target.value)}
-                  disabled={status !== "idle"}
-                  rows={status === "idle" ? 10 : 12}
+                  disabled={status.phase !== "idle"}
+                  rows={status.phase === "idle" ? 10 : 12}
                   className={`h-full w-full resize-none border-none bg-transparent text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 outline-none ${
-                    status !== "idle" ? "opacity-75" : ""
+                    status.phase !== "idle" ? "opacity-75" : ""
                   }`}
                 />
               </div>
 
               {/* Card Bottom Area */}
-              {status === "idle" && (
+              {status.phase === "idle" && (
                 <div className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3">
                   <button
                     type="button"
@@ -121,10 +152,22 @@ export default function StepThree({
                   </button>
                 </div>
               )}
-              {status === "loading" && (
+              {status.phase === "loading" && (
                 <div className="flex items-center justify-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 h-[52px]">
                   <Spinner />
-                  <span className="text-xs text-gray-500">Processing...</span>
+                  <span className="text-xs text-gray-500">{status.message || "Loading..."}</span>
+                </div>
+              )}
+              {status.phase === "error" && (
+                <div className="flex items-center justify-between border-t border-red-200 bg-red-50 px-4 py-3">
+                  <span className="text-xs font-medium text-red-600">Publishing failed</span>
+                  <button
+                    type="button"
+                    onClick={() => setPlatformStatus((prev) => ({ ...prev, [copy.platform]: { phase: "idle", message: "" } }))}
+                    className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-600 shadow-sm hover:bg-red-50"
+                  >
+                    Retry
+                  </button>
                 </div>
               )}
             </div>

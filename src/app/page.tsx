@@ -8,7 +8,7 @@ import {
   DraftArticle,
   SocialCopy,
 } from "@/lib/types";
-import { mockGenerateDrafts, mockAdaptContent } from "@/lib/mock";
+import { mockGenerateDrafts, mockAdaptContent, restoreSession } from "@/lib/mock";
 import { saveToHistory } from "@/lib/storage";
 
 import StepIndicator from "@/components/StepIndicator";
@@ -29,6 +29,34 @@ export default function Home() {
   // ─── Step 1 → Step 2 ───────────────────────────────────────────
   const handleGenerateDrafts = useCallback(async (payload: IdeationPayload) => {
     setState((s) => ({ ...s, isLoading: true, ideation: payload }));
+
+    // If restoring a session, use smart routing
+    if (payload.mode === "request_id") {
+      const result = await restoreSession(payload.content, (status) => {
+        setPollingStatus(status);
+      });
+
+      if (result.targetStep === 3 && result.socialCopies) {
+        // Jump straight to Step 3
+        setState((s) => ({
+          ...s,
+          isLoading: false,
+          currentStep: 3,
+          requestId: result.requestId,
+          socialCopies: result.socialCopies as SocialCopy[],
+        }));
+      } else {
+        // Jump to Step 2 with drafts
+        setState((s) => ({
+          ...s,
+          isLoading: false,
+          currentStep: 2,
+          requestId: result.requestId,
+          drafts: result.drafts || [],
+        }));
+      }
+      return;
+    }
 
     const response = await mockGenerateDrafts(payload, (status) => {
       setPollingStatus(status);

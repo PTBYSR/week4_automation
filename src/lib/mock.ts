@@ -144,6 +144,73 @@ function pollAirtable(
   });
 }
 
+// ─── Restore Session: Smart routing based on Airtable status ────
+export async function restoreSession(
+  requestId: string,
+  onStatusChange: (status: string) => void = () => {}
+): Promise<{
+  targetStep: 2 | 3;
+  requestId: string;
+  drafts?: DraftArticle[];
+  socialCopies?: { platform: string; content: string }[];
+}> {
+  logger.info(`🔄 Restoring session for request: ${requestId}`);
+  onStatusChange("form_data_received");
+
+  // Do a single Airtable fetch to check the current status
+  try {
+    const res = await fetch(`/api/airtable?request_id=${encodeURIComponent(requestId)}`);
+    const data = await res.json();
+
+    logger.info(`📡 Restore check (${requestId}): status = ${data.status}`);
+
+    // Handle explicit error status from n8n
+    if (data.status === "error") {
+      throw new Error("ERROR_FROM_WORKFLOW");
+    }
+
+    // Already past draft selection → jump to Step 3
+    if (data.status === "waiting_post_selection" && data.adaptations) {
+      const adp = Array.isArray(data.adaptations) ? data.adaptations[0] : data.adaptations;
+      const pkg = adp?.package || {};
+
+      const xContent = Array.isArray(pkg.x_thread) ? pkg.x_thread.join("\n\n") : pkg.x_thread || "";
+      const linkedinContent = pkg.linkedin || "";
+      const newsletterData = pkg.newsletter || {};
+      const newsletterContent = `Subject: ${newsletterData.subject || "Newsletter"}\n\n${newsletterData.body || ""}`;
+
+      return {
+        targetStep: 3,
+        requestId,
+        socialCopies: [
+          { platform: "X", content: xContent },
+          { platform: "LinkedIn", content: stripMarkdown(linkedinContent) },
+          { platform: "Newsletter", content: newsletterContent },
+        ],
+      };
+    }
+
+    // Still at draft selection (or earlier) → poll for drafts → Step 2
+    const result = await pollAirtable(requestId, onStatusChange);
+    return {
+      targetStep: 2,
+      requestId,
+      drafts: result.drafts,
+    };
+  } catch (error: any) {
+    if (error.message === "ERROR_FROM_WORKFLOW") {
+      throw error;
+    }
+    logger.warn(`⚠️ Restore failed: ${error.message}. Falling back to draft polling.`);
+    const result = await pollAirtable(requestId, onStatusChange);
+    return {
+      targetStep: 2,
+      requestId,
+      drafts: result.drafts,
+    };
+  }
+}
+
 // ─── Step 1 → Step 2: Generate Drafts (n8n + Airtable Polling) ──
 export async function mockGenerateDrafts(
   payload: IdeationPayload,
@@ -152,17 +219,6 @@ export async function mockGenerateDrafts(
   const isUrl =
     payload.content.startsWith("http://") ||
     payload.content.startsWith("https://");
-
-  // If the user wants to restore a session, skip the webhook
-  // and immediately poll Airtable for the provided request ID.
-  if (payload.mode === "request_id") {
-    const existingRequestId = payload.content;
-    logger.info(`🔄 Restoring session for request: ${existingRequestId}`);
-    
-    // Check Airtable immediately. Since the row theoretically exists 
-    // and is "waiting_for_selection", this should resolve instantly.
-    return pollAirtable(existingRequestId, onStatusChange);
-  }
 
   const requestId = "req_" + Math.random().toString(36).slice(2, 10);
 
@@ -199,24 +255,35 @@ export async function mockGenerateDrafts(
     const result = await pollAirtable(requestId, onStatusChange);
     return result;
   } catch (error: any) {
+    if (error.message === "ERROR_FROM_WORKFLOW") {
+      throw error;
+    }
     // If Airtable is in mock mode or polling failed, use fallback data
     logger.warn(`⚠️ Polling failed or in mock mode: ${error.message}. Using fallback.`);
 
     // Simulate the status progression for demo purposes
     const statuses = ["form_data_received", "data_cleaned", "llm_create_articles", "llm_create_images"];
     let i = 0;
-    const statusInterval = setInterval(() => {
-      if (i < statuses.length) {
-        onStatusChange(statuses[i]);
-        i++;
-      } else {
-        clearInterval(statusInterval);
-      }
-    }, 3000);
+    let statusInterval: NodeJS.Timeout; // Declare statusInterval here
+
+    // Only start interval if not already in "waiting_for_selection"
+    if (onStatusChange) {
+      statusInterval = setInterval(() => {
+        if (i < statuses.length) {
+          onStatusChange(statuses[i]);
+          i++;
+        } else {
+          clearInterval(statusInterval);
+        }
+      }, 3000);
+    }
+
 
     // Wait 15 seconds total, then return mock data
     await new Promise((r) => setTimeout(r, 15000));
-    clearInterval(statusInterval);
+    if (statusInterval!) { // Clear interval if it was set
+      clearInterval(statusInterval);
+    }
     onStatusChange("waiting_for_selection");
 
     const fallbackDrafts: DraftArticle[] = [
@@ -278,6 +345,9 @@ export async function mockAdaptContent(
     const result = await pollAirtable(requestId, onStatusChange, "waiting_post_selection");
     return result;
   } catch (error: any) {
+    if (error.message === "ERROR_FROM_WORKFLOW") {
+      throw error;
+    }
     logger.warn(`⚠️ Adaptation Polling failed or in mock mode: ${error.message}. Using fallback.`);
 
     // Simulate status progression
@@ -316,12 +386,13 @@ export async function mockAdaptContent(
   }
 }
 
-// ─── Step 3: Publish (Per-Platform) ────────────────────────────
+// ─── Step 3: Publish (Per-Platform) with Airtable Polling ──────
 export async function publishToPlatform(
   requestId: string,
   platform: string,
   action: "publish" | "schedule",
-  content: string
+  content: string,
+  onStatusChange: (message: string) => void = () => {}
 ): Promise<{ status: number; message: string }> {
   logger.info(`🚀 Triggering ${action} webhook for ${platform} (req: ${requestId})`);
 
@@ -332,21 +403,80 @@ export async function publishToPlatform(
     content,
   };
 
+  // Phase 0: Clear stale statuses in Airtable before polling
+  onStatusChange("Loading...");
   try {
-    // In the future, you could have different URLs per platform,
-    // or use a single master webhook that routes based on the payload.
-    await fetch(
-      "https://cohort2pod1.app.n8n.cloud/webhook-test/a8018dfd-567f-4132-97f5-fc8391cb24b6-publish-mock", // Replace with real URL when ready
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }
-    );
+    await fetch("/api/airtable", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request_id: requestId,
+        fields: {
+          "Newsletter Post Status": "Loading",
+          "X Post Status": "Loading",
+          "Linkedin Post Status": "Loading",
+        },
+      }),
+    });
+    logger.info(`🧹 Cleared stale post statuses for ${requestId}`);
   } catch (err: any) {
-    logger.warn(`Webhook fire-and-forget (${platform} ${action}): ${err.message}`);
+    logger.warn(`Failed to clear stale statuses: ${err.message}`);
   }
 
-  // Simulate network delay for the UI to show a spinner per card
-  return mockFetch({ status: 200, message: "Published successfully" }, 1500);
+  // Phase 1: Fire & Forget — kick off the n8n workflow
+  fetch(
+    "https://cohort2pod1.app.n8n.cloud/webhook-test/5ef3c9b5-f992-4d5c-8acf-8b31ed494f59",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }
+  ).catch((err) => logger.warn(`Webhook fire-and-forget (${platform} ${action}): ${err.message}`));
+
+  // Phase 2: Poll Airtable for this platform's specific post status column
+  const POLL_INTERVAL = 5000;
+  const MAX_DURATION = 3600000; // 1 hour safety
+  const startTime = Date.now();
+
+  return new Promise((resolve) => {
+    const poll = async () => {
+      if (Date.now() - startTime > MAX_DURATION) {
+        onStatusChange("Timed out");
+        resolve({ status: 408, message: "Polling timed out" });
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/airtable?request_id=${encodeURIComponent(requestId)}`);
+        const data = await res.json();
+
+        // Read the platform-specific post status
+        const postStatus = data.postStatus?.[platform] || "";
+
+        logger.info(`📡 Publish poll (${requestId} / ${platform}): postStatus = "${postStatus}"`);
+
+        if (postStatus === "Published") {
+          onStatusChange("Published");
+          resolve({ status: 200, message: "Published successfully" });
+          return;
+        }
+
+        // Handle error status
+        if (postStatus.toLowerCase() === "error") {
+          onStatusChange("ERROR");
+          resolve({ status: 500, message: "Publishing failed" });
+          return;
+        }
+
+        // Show the dynamic Airtable cell value, or "Loading..." if empty
+        onStatusChange(postStatus || "Loading...");
+        setTimeout(poll, POLL_INTERVAL);
+      } catch (err: any) {
+        logger.error(`Publish polling error (${platform}):`, err.message);
+        setTimeout(poll, POLL_INTERVAL);
+      }
+    };
+
+    poll();
+  });
 }

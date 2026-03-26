@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { InputMode, IdeationPayload } from "@/lib/types";
 import { getStatusMessage } from "@/lib/mock";
 import { logger } from "@/lib/logger";
+import { isValidUrl, isNonsense } from "@/lib/validation";
 import Spinner from "./Spinner";
 
 const LOADING_MESSAGES = [
@@ -23,6 +24,7 @@ interface StepOneProps {
 export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneProps) {
   const [mode, setMode] = useState<InputMode>("idea");
   const [content, setContent] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(0);
 
   useEffect(() => {
@@ -40,6 +42,35 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
 
   const handleSubmit = () => {
     if (!content.trim()) return;
+
+    // Clear previous errors
+    setError(null);
+
+    // 1. URL Validation
+    if (mode === "url") {
+      if (!isValidUrl(content.trim())) {
+        setError("Please enter a valid URL starting with http:// or https://");
+        return;
+      }
+    }
+
+    // 2. Gibberish / Idea Validation
+    if (mode === "idea") {
+      const { valid, reason } = isNonsense(content.trim());
+      if (!valid) {
+        setError(reason || "Please provide a valid idea.");
+        return;
+      }
+    }
+
+    // 3. Request ID Validation (Basic)
+    if (mode === "request_id") {
+      if (content.trim().length < 5) {
+        setError("Invalid Request ID format.");
+        return;
+      }
+    }
+
     onSubmit({ mode, content: content.trim() });
   };
 
@@ -130,27 +161,49 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
         {mode === "idea" ? (
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              if (error) setError(null);
+            }}
             placeholder="Describe your content idea…"
             rows={5}
-            className="w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none focus:border-black"
+            className={`w-full resize-none rounded-md border bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none transition-all ${
+              error ? "border-red-500 shadow-sm" : "border-gray-200 focus:border-black"
+            }`}
           />
         ) : mode === "url" ? (
           <input
             type="url"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              if (error) setError(null);
+            }}
             placeholder="https://example.com/source-article"
-            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none focus:border-black"
+            className={`w-full rounded-md border bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none transition-all ${
+              error ? "border-red-500 shadow-sm" : "border-gray-200 focus:border-black"
+            }`}
           />
         ) : (
           <input
             type="text"
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              if (error) setError(null);
+            }}
             placeholder="e.g. req_abc123xyz"
-            className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none focus:border-black"
+            className={`w-full rounded-md border bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 outline-none transition-all ${
+              error ? "border-red-500 shadow-sm" : "border-gray-200 focus:border-black"
+            }`}
           />
+        )}
+
+        {/* Error message */}
+        {error && (
+          <p className="mt-2 text-xs font-medium text-red-600 animate-in fade-in slide-in-from-top-1 duration-200">
+            {error}
+          </p>
         )}
 
         {/* CTA */}

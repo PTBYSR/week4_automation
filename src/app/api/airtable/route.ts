@@ -62,17 +62,10 @@ export async function GET(request: NextRequest) {
     const fields = record.fields;
     const status = fields["Status"] || "unknown";
     
-    // Read the platform-specific status columns
-    const postStatus = {
-      Newsletter: fields["Newsletter Post Status"] || "",
-      X: fields["X Post Status"] || "",
-      LinkedIn: fields["Linkedin Post Status"] || "",
-    };
-
-    console.log(`[SERVER AIRTABLE] Found record ${requestId}: status = ${status} | Newsletter: ${postStatus.Newsletter} | X: ${postStatus.X} | LinkedIn: ${postStatus.LinkedIn}`);
+    console.log(`[SERVER AIRTABLE] Found record ${requestId}: status = ${status}`);
 
     // Build the response
-    const result: any = { status, postStatus };
+    const result: any = { status };
 
     // When status is "waiting_for_selection", parse and include the draft data
     if (status === "waiting_for_selection" && fields["Raw WH Response"]) {

@@ -87,8 +87,8 @@ function pollAirtable(
           return;
         }
 
-        // 🟢 Case A: Drafts are ready (Step 2)
-        if (data.status === "waiting_for_selection" && data.drafts) {
+        // Drafts are ready!
+        if (targetStatus === "waiting_for_selection" && data.status === "waiting_for_selection" && data.drafts) {
           const draftsArray = Array.isArray(data.drafts) ? data.drafts : [data.drafts];
 
           const mappedDrafts: DraftArticle[] = draftsArray.map((d: any) => ({
@@ -108,8 +108,8 @@ function pollAirtable(
           return;
         }
 
-        // 🟢 Case B: Social copies are ready (Step 3)
-        if (data.status === "waiting_post_selection" && data.adaptations) {
+        // Social copies are ready!
+        if (targetStatus === "waiting_post_selection" && data.status === "waiting_post_selection" && data.adaptations) {
           const adp = Array.isArray(data.adaptations) ? data.adaptations[0] : data.adaptations;
           const pkg = adp?.package || {};
 
@@ -321,8 +321,7 @@ export async function publishToPlatform(
   requestId: string,
   platform: string,
   action: "publish" | "schedule",
-  content: string,
-  onStatusChange: (status: string) => void = () => {}
+  content: string
 ): Promise<{ status: number; message: string }> {
   logger.info(`🚀 Triggering ${action} webhook for ${platform} (req: ${requestId})`);
 
@@ -334,8 +333,10 @@ export async function publishToPlatform(
   };
 
   try {
+    // In the future, you could have different URLs per platform,
+    // or use a single master webhook that routes based on the payload.
     await fetch(
-      "https://cohort2pod1.app.n8n.cloud/webhook-test/5ef3c9b5-f992-4d5c-8acf-8b31ed494f59",
+      "https://cohort2pod1.app.n8n.cloud/webhook-test/a8018dfd-567f-4132-97f5-fc8391cb24b6-publish-mock", // Replace with real URL when ready
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -346,59 +347,6 @@ export async function publishToPlatform(
     logger.warn(`Webhook fire-and-forget (${platform} ${action}): ${err.message}`);
   }
 
-  // Fallback map incase we are offline or Airtable is missing
-  const fallbacks: Record<string, string> = {
-    Newsletter: "Sending mails",
-    X: "Publishing to Twitter",
-    LinkedIn: "Updating LinkedIn",
-  };
-
-  let attempts = 0;
-  const maxAttempts = 20; // 1 minute at 3s intervals
-
-  // Phase 2: Poll Airtable for the specific platform's status column
-  return new Promise((resolve) => {
-    const pollId = setInterval(async () => {
-      attempts++;
-      try {
-        const res = await fetch(`/api/airtable?request_id=${requestId}`);
-        const data = await res.json();
-
-        let currentStatus = "";
-        
-        // Extract the exact column based on platform
-        if (data && data.postStatus) {
-          currentStatus = data.postStatus[platform] || "";
-        }
-
-        // Display current cell data while loading, or default to "Loading..."
-        if (currentStatus) {
-          onStatusChange(currentStatus);
-        } else {
-          onStatusChange("Loading...");
-        }
-
-        logger.info(`📡 Airtable poll Publish [${platform}] (req_${requestId}): status = ${currentStatus || "empty"}`);
-
-        if (currentStatus === "Published") {
-          clearInterval(pollId);
-          resolve({ status: 200, message: "Published successfully" });
-        } else if (currentStatus === "Error") {
-          clearInterval(pollId);
-          resolve({ status: 500, message: "Error publishing to platform" });
-        } else if (attempts > maxAttempts) {
-          clearInterval(pollId);
-          logger.warn(`⚠️ Polling timed out. Assuming success for ${platform}.`);
-          resolve({ status: 200, message: "Published successfully" });
-        }
-      } catch (err: any) {
-        clearInterval(pollId);
-        logger.error(`❌ Polling error: ${err.message}`);
-        resolve({ status: 500, message: "Polling failed" });
-      }
-    }, 3000); // 3 seconds per poll
-
-    // Initial mock feedback if no data yet
-    onStatusChange(`Initializing ${platform} publish...`);
-  });
+  // Simulate network delay for the UI to show a spinner per card
+  return mockFetch({ status: 200, message: "Published successfully" }, 1500);
 }

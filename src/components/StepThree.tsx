@@ -29,11 +29,11 @@ export default function StepThree({
 }: StepThreeProps) {
   const [editedCopies, setEditedCopies] = useState<SocialCopy[]>(copies);
   const [platformStatus, setPlatformStatus] = useState<
-    Record<string, { status: "idle" | "loading" | "published"; message: string }>
+    Record<string, "idle" | "loading" | "published">
   >({
-    X: { status: "idle", message: "" },
-    LinkedIn: { status: "idle", message: "" },
-    Newsletter: { status: "idle", message: "" },
+    X: "idle",
+    LinkedIn: "idle",
+    Newsletter: "idle",
   });
 
   const updateCopy = (index: number, content: string) => {
@@ -47,27 +47,14 @@ export default function StepThree({
     action: "publish" | "schedule",
     content: string
   ) => {
-    setPlatformStatus((prev) => ({
-      ...prev,
-      [platform]: { status: "loading", message: "Initialing..." }
-    }));
-
-    await publishToPlatform(requestId, platform, action, content, (msg) => {
-      setPlatformStatus((prev) => ({
-        ...prev,
-        [platform]: { ...prev[platform], message: msg }
-      }));
-    });
-
-    setPlatformStatus((prev) => ({
-      ...prev,
-      [platform]: { status: "published", message: "" }
-    }));
+    setPlatformStatus((prev) => ({ ...prev, [platform]: "loading" }));
+    await publishToPlatform(requestId, platform, action, content);
+    setPlatformStatus((prev) => ({ ...prev, [platform]: "published" }));
   };
 
-  const allPublished = platformStatus.X.status === "published" && 
-                       platformStatus.LinkedIn.status === "published" && 
-                       platformStatus.Newsletter.status === "published";
+  const allPublished = platformStatus.X === "published" && 
+                       platformStatus.LinkedIn === "published" && 
+                       platformStatus.Newsletter === "published";
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -97,7 +84,7 @@ export default function StepThree({
                 <span className="text-sm font-medium text-black">
                   {meta.label}
                 </span>
-                {status.status === "published" && (
+                {status === "published" && (
                   <span className="ml-auto inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
                     Done
                   </span>
@@ -107,16 +94,16 @@ export default function StepThree({
                 <textarea
                   value={copy.content}
                   onChange={(e) => updateCopy(idx, e.target.value)}
-                  disabled={status.status !== "idle"}
-                  rows={status.status === "idle" ? 10 : 12}
+                  disabled={status !== "idle"}
+                  rows={status === "idle" ? 10 : 12}
                   className={`h-full w-full resize-none border-none bg-transparent text-sm leading-relaxed text-gray-700 placeholder:text-gray-400 outline-none ${
-                    status.status !== "idle" ? "opacity-75" : ""
+                    status !== "idle" ? "opacity-75" : ""
                   }`}
                 />
               </div>
 
               {/* Card Bottom Area */}
-              {status.status === "idle" && (
+              {status === "idle" && (
                 <div className="flex items-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3">
                   <button
                     type="button"
@@ -134,10 +121,10 @@ export default function StepThree({
                   </button>
                 </div>
               )}
-              {status.status === "loading" && (
+              {status === "loading" && (
                 <div className="flex items-center justify-center gap-2 border-t border-gray-200 bg-gray-50 px-4 py-3 h-[52px]">
                   <Spinner />
-                  <span className="text-xs text-gray-500">{status.message || "Processing..."}</span>
+                  <span className="text-xs text-gray-500">Processing...</span>
                 </div>
               )}
             </div>

@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { DraftArticle } from "@/lib/types";
 import { getStatusMessage } from "@/lib/mock";
 import { logger } from "@/lib/logger";
+import { formatGoogleDriveUrl } from "@/lib/validation";
 import Spinner from "./Spinner";
 
 interface StepTwoProps {
@@ -87,11 +88,11 @@ export default function StepTwo({ drafts, isLoading, pollingStatus, onSelect }: 
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto rounded-md border border-gray-100 bg-gray-50 p-6">
+          <div className="max-h-[500px] overflow-y-auto rounded-md border border-gray-100 bg-gray-50 p-6">
             {activeDraft.image_url && (
               <div className="mb-6 overflow-hidden rounded-md border border-gray-200">
                 <img
-                  src={activeDraft.image_url}
+                  src={formatGoogleDriveUrl(activeDraft.image_url)}
                   alt={`Generated graphic for ${activeDraft.title}`}
                   className="w-full object-cover"
                 />

@@ -74,17 +74,29 @@ export async function GET(request: NextRequest) {
       LinkedIn: fields["Linkedin Post Status"] || "",
     };
 
-    // When status is "waiting_for_selection", parse and include the draft data
-    if (status === "waiting_for_selection" && fields["Raw WH Response"]) {
+    // Parse Drafts and Articles
+    const rawWH = fields["Raw WH Response"];
+    const rawArticles = fields["Raw Articles Output"];
+
+    if (status === "waiting_for_selection" && (rawWH || rawArticles)) {
       try {
-        const rawResponse = fields["Raw WH Response"];
-        const drafts =
-          typeof rawResponse === "string"
-            ? JSON.parse(rawResponse)
-            : rawResponse;
-        result.drafts = drafts;
+        const metadataArray = rawWH ? (typeof rawWH === "string" ? JSON.parse(rawWH) : rawWH) : [];
+        const contentArray = rawArticles ? (typeof rawArticles === "string" ? JSON.parse(rawArticles) : rawArticles) : [];
+
+        // Merge metadata (id, title, angle) with full content (output)
+        // We assume they are in the same order (Draft 1, 2, 3)
+        result.drafts = metadataArray.map((meta: any, index: number) => ({
+          id: meta.id || `draft_${index + 1}`,
+          title: meta.title || "Untitled Draft",
+          style: meta.style || meta.angle || "Professional",
+          // Prefer the full article output if available, otherwise fall back to metadata body
+          body: contentArray[index]?.output || meta.body || "",
+          image_prompt: meta.image_prompt || "",
+          word_count: meta.word_count || 0,
+          image_url: meta.image_url || undefined, // image_url might be gone, but we keep the field
+        }));
       } catch (parseError) {
-        console.error("Failed to parse Raw WH Response:", parseError);
+        console.error("Failed to parse draft data:", parseError);
         result.parseError = "Failed to parse draft data from Airtable";
       }
     }

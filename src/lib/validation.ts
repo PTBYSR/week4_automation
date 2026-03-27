@@ -48,3 +48,16 @@ export function isNonsense(text: string): { valid: boolean; reason?: string } {
 
   return { valid: true };
 }
+
+/**
+ * Transforms a Google Drive link into a direct rendering thumbnail URL.
+ * Bypasses ORB/CORS issues by using the specialized image endpoint.
+ */
+export function formatGoogleDriveUrl(url: string | undefined): string {
+  if (!url) return "";
+  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match && match[1]) {
+    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+  }
+  return url;
+}

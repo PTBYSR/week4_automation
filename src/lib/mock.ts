@@ -3,6 +3,7 @@ import {
   AdaptContentResponse,
   IdeationPayload,
   DraftArticle,
+  SocialCopy,
 } from "./types";
 import { logger } from "./logger";
 
@@ -111,21 +112,19 @@ function pollAirtable(
         // Social copies are ready!
         if (targetStatus === "waiting_post_selection" && data.status === "waiting_post_selection" && data.adaptations) {
           const adp = Array.isArray(data.adaptations) ? data.adaptations[0] : data.adaptations;
-          const pkg = adp?.package || {};
+          const channels = adp?.channels || {};
 
-          // Extract and format the specific structure requested
-          const xContent = Array.isArray(pkg.x_thread) ? pkg.x_thread.join("\n\n") : pkg.x_thread || "";
-          const linkedinContent = pkg.linkedin || "";
-          const newsletterData = pkg.newsletter || {};
-          const newsletterContent = `Subject: ${newsletterData.subject || "Newsletter"}\n\n${newsletterData.body || ""}`;
+          // Extract from new channels-based structure
+          const xContent = Array.isArray(channels.twitter?.content) ? channels.twitter.content.join("\n\n") : channels.twitter?.content || "";
+          const linkedinContent = channels.linkedin?.content || "";
+          const newsletterContent = channels.newsletter?.content || "";
 
           resolve({
             copies: [
-              { platform: "X", content: xContent },
-              { platform: "LinkedIn", content: stripMarkdown(linkedinContent) },
-              { platform: "Newsletter", content: newsletterContent },
+              { platform: "X", content: xContent, image_url: channels.twitter?.image_url },
+              { platform: "LinkedIn", content: linkedinContent, image_url: channels.linkedin?.image_url },
+              { platform: "Newsletter", content: newsletterContent, image_url: channels.newsletter?.image_url },
             ],
-            image_url: adp?.image_url,
           });
           return;
         }
@@ -152,7 +151,7 @@ export async function restoreSession(
   targetStep: 2 | 3;
   requestId: string;
   drafts?: DraftArticle[];
-  socialCopies?: { platform: string; content: string }[];
+  socialCopies?: SocialCopy[];
 }> {
   logger.info(`🔄 Restoring session for request: ${requestId}`);
   onStatusChange("form_data_received");
@@ -172,20 +171,19 @@ export async function restoreSession(
     // Already past draft selection → jump to Step 3
     if (data.status === "waiting_post_selection" && data.adaptations) {
       const adp = Array.isArray(data.adaptations) ? data.adaptations[0] : data.adaptations;
-      const pkg = adp?.package || {};
+      const channels = adp?.channels || {};
 
-      const xContent = Array.isArray(pkg.x_thread) ? pkg.x_thread.join("\n\n") : pkg.x_thread || "";
-      const linkedinContent = pkg.linkedin || "";
-      const newsletterData = pkg.newsletter || {};
-      const newsletterContent = `Subject: ${newsletterData.subject || "Newsletter"}\n\n${newsletterData.body || ""}`;
+      const xContent = Array.isArray(channels.twitter?.content) ? channels.twitter.content.join("\n\n") : channels.twitter?.content || "";
+      const linkedinContent = channels.linkedin?.content || "";
+      const newsletterContent = channels.newsletter?.content || "";
 
       return {
         targetStep: 3,
         requestId,
         socialCopies: [
-          { platform: "X", content: xContent },
-          { platform: "LinkedIn", content: stripMarkdown(linkedinContent) },
-          { platform: "Newsletter", content: newsletterContent },
+          { platform: "X", content: xContent, image_url: channels.twitter?.image_url },
+          { platform: "LinkedIn", content: linkedinContent, image_url: channels.linkedin?.image_url },
+          { platform: "Newsletter", content: newsletterContent, image_url: channels.newsletter?.image_url },
         ],
       };
     }
@@ -238,17 +236,28 @@ export async function mockGenerateDrafts(
     },
   ];
 
-  // Phase 1: Fire & Forget — send the webhook, don't await the response
+  // Phase 1: Fire & Forget — send via backend proxy to avoid CORS
   onStatusChange("form_data_received");
   logger.info(`🚀 Triggering n8n webhook for request: ${requestId}`);
-  fetch(
-    "https://cohort2pod1.app.n8n.cloud/webhook-test/e1bbd678-2b08-412c-b3fc-64cafa186ba7",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(n8nPayload),
-    }
-  ).catch((err) => console.warn("Webhook fire-and-forget:", err.message));
+  fetch("/api/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      target: "ideation",
+      payload: n8nPayload,
+    }),
+  }).catch((err) => console.warn("Webhook proxy failed:", err.message));
+
+  // Phase 1.5: Log to Airtable immediately for duplication check & history
+  fetch("/api/airtable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      request_id: requestId,
+      source_url: payload.mode === "url" ? payload.content : "",
+      raw_content: payload.mode === "idea" ? payload.content : "",
+    }),
+  }).catch((err) => console.warn("Airtable initial log failed:", err.message));
 
   // Phase 2: Poll Airtable for the result
   try {
@@ -328,17 +337,17 @@ export async function mockAdaptContent(
     selected_draft: draft,
   };
 
-  // Phase 1: Fire & Forget Webhook
+  // Phase 1: Fire & Forget Webhook via backend proxy
   onStatusChange("writing_social_copies");
   logger.info(`🚀 Triggering adaptation webhook for request: ${requestId}`);
-  fetch(
-    "https://cohort2pod1.app.n8n.cloud/webhook-test/a8018dfd-567f-4132-97f5-fc8391cb24b6",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(n8nPayload),
-    }
-  ).catch((err) => logger.warn(`Webhook fire-and-forget (Adaptation): ${err.message}`));
+  fetch("/api/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      target: "adaptation",
+      payload: n8nPayload,
+    }),
+  }).catch((err) => logger.warn(`Webhook proxy failed (Adaptation): ${err.message}`));
 
   // Phase 2: Poll Airtable for the result
   try {
@@ -392,7 +401,9 @@ export async function publishToPlatform(
   platform: string,
   action: "publish" | "schedule",
   content: string,
-  onStatusChange: (message: string) => void = () => {}
+  onStatusChange: (message: string) => void = () => {},
+  image_url?: string,
+  scheduledTime?: string
 ): Promise<{ status: number; message: string }> {
   logger.info(`🚀 Triggering ${action} webhook for ${platform} (req: ${requestId})`);
 
@@ -401,7 +412,11 @@ export async function publishToPlatform(
     platform,
     action,
     content,
+    image_url,
+    scheduled_time: scheduledTime,
   };
+
+  const payloadString = JSON.stringify(payload);
 
   // Phase 0: Clear stale statuses in Airtable before polling
   onStatusChange("Loading...");
@@ -412,26 +427,31 @@ export async function publishToPlatform(
       body: JSON.stringify({
         request_id: requestId,
         fields: {
-          "Newsletter Post Status": "Loading",
-          "X Post Status": "Loading",
-          "Linkedin Post Status": "Loading",
+          "Status": action === "schedule" ? "Scheduled" : undefined,
+          "Newsletter Post Status": action === "schedule" ? "Scheduled" : "Loading",
+          "X Post Status": action === "schedule" ? "Scheduled" : "Loading",
+          "Linkedin Post Status": action === "schedule" ? "Scheduled" : "Loading",
+          "Raw Publish Data From Frontend": payloadString,
+          "Scheduled Time": scheduledTime || null,
         },
       }),
     });
-    logger.info(`🧹 Cleared stale post statuses for ${requestId}`);
+    logger.info(`🧹 Updated Airtable with ${action} status for ${requestId}`);
   } catch (err: any) {
-    logger.warn(`Failed to clear stale statuses: ${err.message}`);
+    logger.warn(`Failed to update Airtable fields: ${err.message}`);
   }
 
-  // Phase 1: Fire & Forget — kick off the n8n workflow
-  fetch(
-    "https://cohort2pod1.app.n8n.cloud/webhook-test/5ef3c9b5-f992-4d5c-8acf-8b31ed494f59",
-    {
+  // Phase 1: Fire & Forget via backend proxy (Only if publishing NOW)
+  if (action === "publish") {
+    fetch("/api/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    }
-  ).catch((err) => logger.warn(`Webhook fire-and-forget (${platform} ${action}): ${err.message}`));
+      body: JSON.stringify({
+        target: "publish",
+        payload: payload,
+      }),
+    }).catch((err) => logger.error(`API Publish failed: ${err.message}`));
+  }
 
   // Phase 2: Poll Airtable for this platform's specific post status column
   const POLL_INTERVAL = 5000;

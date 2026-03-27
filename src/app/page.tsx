@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   WorkflowState,
   INITIAL_WORKFLOW_STATE,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { mockGenerateDrafts, mockAdaptContent, restoreSession } from "@/lib/mock";
 import { saveToHistory } from "@/lib/storage";
+import { useSearchParams, useRouter } from "next/navigation";
 
 import StepIndicator from "@/components/StepIndicator";
 import StepOne from "@/components/StepOne";
@@ -25,6 +26,10 @@ export default function Home() {
     visible: false,
     message: "",
   });
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const urlRequestId = searchParams.get("request_id");
 
   // ─── Step 1 → Step 2 ───────────────────────────────────────────
   const handleGenerateDrafts = useCallback(async (payload: IdeationPayload) => {
@@ -71,6 +76,14 @@ export default function Home() {
     }));
   }, []);
 
+  // --- Automatic URL restoration ---
+  useEffect(() => {
+    if (urlRequestId && !state.requestId && !state.isLoading && state.currentStep === 1) {
+      handleGenerateDrafts({ mode: "request_id", content: urlRequestId });
+      // We no longer clear the URL here to allow for sticky restoration on refresh.
+    }
+  }, [urlRequestId, state.requestId, state.isLoading, state.currentStep, handleGenerateDrafts]);
+
   // ─── Step 2 → Step 3 ───────────────────────────────────────────
   const handleSelectDraft = useCallback(async (draft: DraftArticle) => {
     setState((s) => ({ ...s, isLoading: true, selectedDraft: draft }));
@@ -112,7 +125,12 @@ export default function Home() {
   const handleReset = useCallback(() => {
     setState(INITIAL_WORKFLOW_STATE);
     setPublished(false);
-  }, []);
+    // Also clear URL params
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("request_id")) {
+      router.replace("/");
+    }
+  }, [router]);
 
   return (
     <>

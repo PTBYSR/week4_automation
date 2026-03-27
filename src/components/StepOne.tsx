@@ -26,6 +26,9 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loadingIndex, setLoadingIndex] = useState(0);
+  const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [matchedRequestId, setMatchedRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoading) {
@@ -72,6 +75,48 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
     }
 
     onSubmit({ mode, content: content.trim() });
+  };
+
+  const handleStartWithDuplicateCheck = async () => {
+    if (!content.trim()) return;
+    setError(null);
+
+    // Skip duplicate check for restoration mode
+    if (mode === "request_id") {
+      handleSubmit();
+      return;
+    }
+
+    // Basic Validation First
+    if (mode === "url" && !isValidUrl(content.trim())) {
+      setError("Please enter a valid URL starting with http:// or https://");
+      return;
+    }
+    if (mode === "idea") {
+      const { valid, reason } = isNonsense(content.trim());
+      if (!valid) {
+        setError(reason || "Please provide a valid idea.");
+        return;
+      }
+    }
+
+    setDuplicateCheckLoading(true);
+    try {
+      const res = await fetch(`/api/airtable?check_duplicate=${encodeURIComponent(content.trim())}`);
+      const data = await res.json();
+
+      if (data.exists) {
+        setMatchedRequestId(data.request_id);
+        setShowDuplicateModal(true);
+      } else {
+        handleSubmit();
+      }
+    } catch (e) {
+      console.error("Duplicate check failed:", e);
+      handleSubmit(); // Proceed anyway on error
+    } finally {
+      setDuplicateCheckLoading(false);
+    }
   };
 
   if (isLoading) {
@@ -209,13 +254,51 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
         {/* CTA */}
         <button
           type="button"
-          onClick={handleSubmit}
-          disabled={!content.trim()}
-          className="mt-5 w-full rounded-md bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={handleStartWithDuplicateCheck}
+          disabled={!content.trim() || duplicateCheckLoading}
+          className="mt-5 w-full rounded-md bg-black px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center gap-2"
         >
+          {duplicateCheckLoading && <Spinner className="h-4 w-4 border-white/30 border-t-white" />}
           {mode === "request_id" ? "Restore Drafts" : "Generate Drafts"}
         </button>
       </div>
+
+      {/* Duplicate Modal */}
+      {showDuplicateModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-50">
+              <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-black">Duplicate Found</h3>
+            <p className="mt-2 text-sm text-gray-500">
+              A pipeline for this {mode === "url" ? "URL" : "idea"} already exists (ID: <span className="font-mono font-medium text-black">{matchedRequestId}</span>). 
+              Starting a new one might be redundant.
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuplicateModal(false);
+                  handleSubmit();
+                }}
+                className="w-full rounded-lg bg-black py-2.5 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                Proceed Anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDuplicateModal(false)}
+                className="w-full rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Change {mode === "url" ? "URL" : "Idea"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

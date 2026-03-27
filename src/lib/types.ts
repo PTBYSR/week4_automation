@@ -27,6 +27,7 @@ export interface GenerateDraftsResponse {
 export interface SocialCopy {
   platform: "X" | "LinkedIn" | "Newsletter";
   content: string;
+  image_url?: string;
 }
 
 export interface AdaptContentResponse {

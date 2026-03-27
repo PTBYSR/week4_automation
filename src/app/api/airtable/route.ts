@@ -6,7 +6,42 @@ const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME!;
 
 export async function GET(request: NextRequest) {
   const requestId = request.nextUrl.searchParams.get("request_id");
+  const checkDuplicate = request.nextUrl.searchParams.get("check_duplicate");
 
+  // --- Duplicate Check Case ---
+  if (checkDuplicate) {
+    try {
+      // Escape single quotes for Airtable formula
+      const safeValue = checkDuplicate.replace(/'/g, "\\'");
+      const formula = encodeURIComponent(
+        `OR({URL}='${safeValue}', {Raw Content}='${safeValue}')`
+      );
+      const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}?filterByFormula=${formula}&maxRecords=1&fields%5B%5D=Request%20ID`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${AIRTABLE_PAT}` },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Airtable error: ${await response.text()}`);
+      }
+
+      const data = await response.json();
+      if (data.records && data.records.length > 0) {
+        return NextResponse.json({
+          exists: true,
+          request_id: data.records[0].fields["Request ID"],
+        });
+      }
+
+      return NextResponse.json({ exists: false });
+    } catch (error: any) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+  }
+
+  // --- Standard Request ID Polling Case ---
   if (!requestId) {
     return NextResponse.json(
       { error: "Missing request_id parameter" },
@@ -117,10 +152,11 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch (error) {
-    console.error("Airtable polling error:", error);
+  } catch (error: any) {
+    console.error("Airtable polling error:", error?.message || error);
+    console.error("Stack:", error?.stack);
     return NextResponse.json(
-      { error: "Internal server error during Airtable polling" },
+      { error: "Internal server error during Airtable polling", details: error?.message },
       { status: 500 }
     );
   }
@@ -177,5 +213,50 @@ export async function PATCH(request: NextRequest) {
   } catch (error) {
     console.error("Airtable PATCH error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// ─── POST: Create a new record from the frontend ────────────────
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const { request_id, source_url, raw_content } = body;
+
+  if (!request_id) {
+    return NextResponse.json({ error: "Missing request_id" }, { status: 400 });
+  }
+
+  try {
+    const url = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(AIRTABLE_TABLE_NAME)}`;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_PAT}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fields: {
+          "Request ID": request_id,
+          "URL": source_url || "",
+          "Raw Content": raw_content || "",
+          "Status": "form_data_received",
+          "Newsletter Post Status": "Pending",
+          "X Post Status": "Pending",
+          "Linkedin Post Status": "Pending",
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Airtable POST error:", errorText);
+      return NextResponse.json({ error: "Failed to create record", details: errorText }, { status: 500 });
+    }
+
+    const data = await response.json();
+    console.log(`[SERVER AIRTABLE] Created initial record for ${request_id}`);
+    return NextResponse.json({ success: true, id: data.id });
+  } catch (error: any) {
+    console.error("Airtable POST error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

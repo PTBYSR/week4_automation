@@ -52,12 +52,43 @@ export function isNonsense(text: string): { valid: boolean; reason?: string } {
 /**
  * Transforms a Google Drive link into a direct rendering thumbnail URL.
  * Bypasses ORB/CORS issues by using the specialized image endpoint.
+ * Handles both formats:
+ *   - Share link:  https://drive.google.com/file/d/FILE_ID/view
+ *   - Direct link: https://drive.google.com/uc?export=view&id=FILE_ID
  */
 export function formatGoogleDriveUrl(url: string | undefined): string {
   if (!url) return "";
-  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (match && match[1]) {
-    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+
+  // Match /d/FILE_ID/ (share links)
+  const shareMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (shareMatch && shareMatch[1]) {
+    return `https://drive.google.com/thumbnail?id=${shareMatch[1]}&sz=w1000`;
   }
+
+  // Match ?id=FILE_ID or &id=FILE_ID (direct links like uc?export=view&id=...)
+  const queryMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (queryMatch && queryMatch[1]) {
+    return `https://drive.google.com/thumbnail?id=${queryMatch[1]}&sz=w1000`;
+  }
+
   return url;
+}
+
+/**
+ * Removes common markdown syntax (bold, italic, links, etc.) from a string.
+ * Useful for platforms like LinkedIn that don't natively support markdown.
+ */
+export function stripMarkdown(text: string): string {
+  if (!text) return "";
+  return text
+    // Remove bold/italic (**text**, __text__, *text*, _text_)
+    .replace(/(\*\*|__|\*|_)/g, "")
+    // Remove links [text](url) -> text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    // Remove headers (# text)
+    .replace(/^#+\s+/gm, "")
+    // Remove horizontal rules
+    .replace(/^-{3,}$/gm, "")
+    // Clean up extra spaces/newlines that might result
+    .trim();
 }

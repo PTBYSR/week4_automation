@@ -161,6 +161,7 @@ function WorkflowManager() {
           copies={state.socialCopies}
           onFinish={handleFinish}
           onReset={handleReset}
+          onBackToDrafts={() => setState((s) => ({ ...s, currentStep: 2 }))}
         />
       )}
 

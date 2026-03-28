@@ -34,7 +34,10 @@ export default function RootLayout({
                   HITL
                 </span>
               </div>
-              <span className="text-xs text-gray-400">v1.0</span>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-gray-400">v1.0</span>
+                <img src="/logo.png" alt="Logo" className="h-8 w-auto object-contain" />
+              </div>
             </div>
           </header>
 

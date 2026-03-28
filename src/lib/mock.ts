@@ -3,14 +3,9 @@ import {
   AdaptContentResponse,
   IdeationPayload,
   DraftArticle,
-  SocialCopy,
 } from "./types";
+import { SocialCopy } from "./types";
 import { logger } from "./logger";
-
-// ─── Generic mock fetch with simulated latency ─────────────────
-function mockFetch<T>(data: T, delayMs = 1800): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(data), delayMs));
-}
 
 // ─── Utility: Strip Markdown (for LinkedIn) ───────────────────
 function stripMarkdown(text: string): string {
@@ -92,7 +87,7 @@ function pollAirtable(
         if (targetStatus === "waiting_for_selection" && data.status === "waiting_for_selection" && data.drafts) {
           const draftsArray = Array.isArray(data.drafts) ? data.drafts : [data.drafts];
 
-          const mappedDrafts: DraftArticle[] = draftsArray.map((d: any) => ({
+          const mappedDrafts: DraftArticle[] = draftsArray.map((d: Record<string, any>) => ({
             id: d.id || "draft_" + Math.random().toString(36).slice(2),
             title: d.title || "Untitled Draft",
             style: d.angle || d.style || "Default",
@@ -131,8 +126,9 @@ function pollAirtable(
 
         // Still processing — poll again
         setTimeout(poll, intervalMs);
-      } catch (err: any) {
-        logger.error("Polling error:", err.message);
+      } catch (err: unknown) {
+      const error = err as Error;
+      onStatusChange(`Error: ${error.message}`);
         // Network hiccup — retry
         setTimeout(poll, intervalMs);
       }
@@ -437,8 +433,9 @@ export async function publishToPlatform(
       }),
     });
     logger.info(`🧹 Updated Airtable with ${action} status for ${requestId}`);
-  } catch (err: any) {
-    logger.warn(`Failed to update Airtable fields: ${err.message}`);
+  } catch (err: unknown) {
+    const error = err as Error;
+    logger.warn(`Failed to update Airtable fields: ${error.message}`);
   }
 
   // Phase 1: Fire & Forget via backend proxy (Only if publishing NOW)
@@ -450,7 +447,12 @@ export async function publishToPlatform(
         target: "publish",
         payload: payload,
       }),
-    }).catch((err) => logger.error(`API Publish failed: ${err.message}`));
+    }).catch((err: Error) => logger.error(`API Publish failed: ${err.message}`));
+  } else {
+    // If scheduling, we don't need to poll for "Published" status now.
+    // The worker will handle it later.
+    onStatusChange("Scheduled");
+    return { status: 200, message: "Scheduled successfully" };
   }
 
   // Phase 2: Poll Airtable for this platform's specific post status column
@@ -491,8 +493,9 @@ export async function publishToPlatform(
         // Show the dynamic Airtable cell value, or "Loading..." if empty
         onStatusChange(postStatus || "Loading...");
         setTimeout(poll, POLL_INTERVAL);
-      } catch (err: any) {
-        logger.error(`Publish polling error (${platform}):`, err.message);
+      } catch (err: unknown) {
+        const error = err as Error;
+        logger.error(`Publish polling error (${platform}):`, error.message);
         setTimeout(poll, POLL_INTERVAL);
       }
     };

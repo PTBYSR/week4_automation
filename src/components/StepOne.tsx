@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { InputMode, IdeationPayload } from "@/lib/types";
 import { getStatusMessage } from "@/lib/mock";
-import { logger } from "@/lib/logger";
 import { isValidUrl, isNonsense } from "@/lib/validation";
 import Spinner from "./Spinner";
 
@@ -25,7 +24,7 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
   const [mode, setMode] = useState<InputMode>("idea");
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loadingIndex, setLoadingIndex] = useState(0);
+  const [, setLoadingIndex] = useState<number | null>(null);
   const [duplicateCheckLoading, setDuplicateCheckLoading] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [matchedRequestId, setMatchedRequestId] = useState<string | null>(null);
@@ -37,7 +36,10 @@ export default function StepOne({ isLoading, pollingStatus, onSubmit }: StepOneP
     }
 
     const interval = setInterval(() => {
-      setLoadingIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+      setLoadingIndex((prev: number | null) => {
+        if (prev === null) return 0;
+        return (prev + 1) % LOADING_MESSAGES.length;
+      });
     }, 8000); // Change message every 8 seconds
 
     return () => clearInterval(interval);

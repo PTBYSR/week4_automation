@@ -2,29 +2,13 @@
  * Utility to send logs to both the browser console AND the terminal (via /api/log)
  */
 export const logger = {
-  info: (message: string, data?: any) => {
-    console.log(message, data || "");
-    sendLog("info", message, data);
+  info: (message: string, metadata?: unknown) => {
+    console.log(`[INFO] ${message}`, metadata || "");
   },
-  warn: (message: string, data?: any) => {
-    console.warn(message, data || "");
-    sendLog("warn", message, data);
+  warn: (message: string, metadata?: unknown) => {
+    console.warn(`[WARN] ${message}`, metadata || "");
   },
-  error: (message: string, data?: any) => {
-    console.error(message, data || "");
-    sendLog("error", message, data);
+  error: (message: string, metadata?: unknown) => {
+    console.error(`[ERROR] ${message}`, metadata || "");
   },
 };
-
-async function sendLog(level: string, message: string, data?: any) {
-  try {
-    // Fire and forget to avoid slowing down the UI
-    fetch("/api/log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level, message, data }),
-    }).catch(() => {});
-  } catch (e) {
-    // Ignore logging errors
-  }
-}

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const AIRTABLE_PAT = process.env.AIRTABLE_PAT!;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID!;
 const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME!;
@@ -36,7 +38,8 @@ export async function GET(request: NextRequest) {
       }
 
       return NextResponse.json({ exists: false });
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const error = err as Error;
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
@@ -86,7 +89,6 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
 
     if (!data.records || data.records.length === 0) {
-      console.log(`[SERVER AIRTABLE] No record found yet for ${requestId}`);
       return NextResponse.json({
         status: "not_found",
         message: `No record found for request_id: ${requestId}`,
@@ -96,11 +98,9 @@ export async function GET(request: NextRequest) {
     const record = data.records[0];
     const fields = record.fields;
     const status = fields["Status"] || "unknown";
-    
-    console.log(`[SERVER AIRTABLE] Found record ${requestId}: status = ${status}`);
 
     // Build the response
-    const result: any = { status };
+    const result: Record<string, unknown> = { status };
 
     // Always include per-platform post statuses if they exist
     result.postStatus = {
@@ -119,16 +119,14 @@ export async function GET(request: NextRequest) {
         const contentArray = rawArticles ? (typeof rawArticles === "string" ? JSON.parse(rawArticles) : rawArticles) : [];
 
         // Merge metadata (id, title, angle) with full content (output)
-        // We assume they are in the same order (Draft 1, 2, 3)
         result.drafts = metadataArray.map((meta: any, index: number) => ({
           id: meta.id || `draft_${index + 1}`,
           title: meta.title || "Untitled Draft",
           style: meta.style || meta.angle || "Professional",
-          // Prefer the full article output if available, otherwise fall back to metadata body
           body: contentArray[index]?.output || meta.body || "",
           image_prompt: meta.image_prompt || "",
           word_count: meta.word_count || 0,
-          image_url: meta.image_url || undefined, // image_url might be gone, but we keep the field
+          image_url: meta.image_url || undefined,
         }));
       } catch (parseError) {
         console.error("Failed to parse draft data:", parseError);
@@ -152,11 +150,11 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch (error: any) {
-    console.error("Airtable polling error:", error?.message || error);
-    console.error("Stack:", error?.stack);
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error("Airtable polling error:", error.message);
     return NextResponse.json(
-      { error: "Internal server error during Airtable polling", details: error?.message },
+      { error: "Internal server error during Airtable polling", details: error.message },
       { status: 500 }
     );
   }
@@ -208,11 +206,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Failed to update Airtable", details: errorText }, { status: 500 });
     }
 
-    console.log(`[SERVER AIRTABLE] Cleared post statuses for ${request_id}`);
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Airtable PATCH error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error("Airtable Patch Error:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
@@ -255,8 +253,9 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     console.log(`[SERVER AIRTABLE] Created initial record for ${request_id}`);
     return NextResponse.json({ success: true, id: data.id });
-  } catch (error: any) {
-    console.error("Airtable POST error:", error);
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error("Airtable POST error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

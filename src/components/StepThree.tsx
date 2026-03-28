@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { SocialCopy } from "@/lib/types";
 import { publishToPlatform } from "@/lib/mock";
 import { formatGoogleDriveUrl, stripMarkdown } from "@/lib/validation";
@@ -38,7 +38,6 @@ export default function StepThree({
   requestId,
   copies,
   onFinish,
-  onReset,
 }: StepThreeProps) {
   // Initialize state with LinkedIn markdown stripped automatically
   const [editedCopies, setEditedCopies] = useState<SocialCopy[]>(() => 
@@ -68,23 +67,6 @@ export default function StepThree({
     setEditedCopies((prev) =>
       prev.map((c, i) => (i === index ? { ...c, content } : c))
     );
-  };
-
-  const handleImageDelete = (idx: number) => {
-    setEditedCopies((prev) =>
-      prev.map((c, i) => (i === idx ? { ...c, image_url: undefined } : c))
-    );
-  };
-
-  const handleImageUpload = (idx: number, file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result as string;
-      setEditedCopies((prev) =>
-        prev.map((c, i) => (i === idx ? { ...c, image_url: base64 } : c))
-      );
-    };
-    reader.readAsDataURL(file);
   };
 
   // Auto-resize textareas on initial load
@@ -216,33 +198,17 @@ export default function StepThree({
               {/* Scrollable Content Area */}
               <div className="flex-1 overflow-y-auto p-0 custom-scrollbar bg-white">
                 <div className="p-4 pt-2">
-                  {copy.image_url ? (
+                  {copy.image_url && (
                     <div 
-                      className="group relative mb-5 overflow-hidden rounded-xl border border-gray-100 shadow-sm transition-all hover:ring-2 hover:ring-black/5"
+                      className="group relative mb-5 overflow-hidden rounded-xl border border-gray-100 cursor-zoom-in shadow-sm"
+                      onClick={() => setSelectedImage(copy.image_url!)}
                     >
                       <img
-                        src={copy.image_url.startsWith('data:') ? copy.image_url : formatGoogleDriveUrl(copy.image_url)}
-                        alt={`Graphic for ${copy.platform}`}
-                        onClick={() => setSelectedImage(copy.image_url!)}
-                        className="w-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-zoom-in"
+                        src={formatGoogleDriveUrl(copy.image_url)}
+                        alt={`Generated graphic for ${copy.platform}`}
+                        className="w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
-                      
-                      {/* Delete Overlay Button */}
-                      {status.phase === "idle" && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleImageDelete(idx);
-                          }}
-                          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-md opacity-0 transition-opacity hover:bg-red-600 group-hover:opacity-100"
-                        >
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-
-                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-300 group-hover:bg-black/10 group-hover:opacity-100">
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all duration-300 group-hover:bg-black/20 group-hover:opacity-100">
                         <span className="rounded-full bg-white/95 p-3 text-black shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
                           <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
@@ -250,28 +216,6 @@ export default function StepThree({
                         </span>
                       </div>
                     </div>
-                  ) : (
-                    /* Custom Image Upload Placeholder */
-                    status.phase === "idle" && (
-                      <div className="mb-5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 p-6 transition-colors hover:border-gray-300">
-                        <svg className="mb-2 h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <p className="mb-3 text-[11px] font-medium text-gray-500 uppercase tracking-wider">No graphic attached</p>
-                        <label className="cursor-pointer rounded-md bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-                          Upload Custom Image
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleImageUpload(idx, file);
-                            }}
-                          />
-                        </label>
-                      </div>
-                    )
                   )}
                   
                   <textarea
@@ -447,7 +391,7 @@ export default function StepThree({
               </svg>
             </button>
             <img
-              src={selectedImage.startsWith('data:') ? selectedImage : formatGoogleDriveUrl(selectedImage)}
+              src={formatGoogleDriveUrl(selectedImage)}
               alt="Zoomed graphic"
               className="w-full rounded-lg shadow-2xl object-contain max-h-[85vh]"
               onClick={(e) => e.stopPropagation()}

@@ -4,7 +4,6 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { DraftArticle } from "@/lib/types";
 import { getStatusMessage } from "@/lib/mock";
-import { logger } from "@/lib/logger";
 import { formatGoogleDriveUrl } from "@/lib/validation";
 import Spinner from "./Spinner";
 

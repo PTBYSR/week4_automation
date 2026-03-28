@@ -26,8 +26,9 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data);
-  } catch (error: any) {
-    console.error("Publish Proxy Error:", error);
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error("Publish Proxy Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

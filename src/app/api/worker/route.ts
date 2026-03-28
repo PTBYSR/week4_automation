@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const secret = request.headers.get("x-worker-secret") || searchParams.get("secret");
@@ -73,13 +75,15 @@ export async function GET(request: NextRequest) {
         } else {
           results.push({ id: record.id, status: "n8n_failed", error: await n8nRes.text() });
         }
-      } catch (parseErr: any) {
+      } catch (err: unknown) {
+        const parseErr = err as Error;
         results.push({ id: record.id, status: "error", error: parseErr.message });
       }
     }
 
     return NextResponse.json({ processed: records.length, results });
-  } catch (error: any) {
+  } catch (err: unknown) {
+    const error = err as Error;
     console.error("Worker Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

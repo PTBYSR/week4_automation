@@ -18,9 +18,11 @@ import StepTwo from "@/components/StepTwo";
 import StepThree from "@/components/StepThree";
 import Toast from "@/components/Toast";
 
-export default function Home() {
+import { Suspense } from "react";
+
+function WorkflowManager() {
   const [state, setState] = useState<WorkflowState>(INITIAL_WORKFLOW_STATE);
-  const [published, setPublished] = useState(false);
+  const [_published, setPublished] = useState(false);
   const [pollingStatus, setPollingStatus] = useState<string>("");
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({
     visible: false,
@@ -169,5 +171,13 @@ export default function Home() {
         onClose={() => setToast({ visible: false, message: "" })}
       />
     </>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading workflow...</div>}>
+      <WorkflowManager />
+    </Suspense>
   );
 }

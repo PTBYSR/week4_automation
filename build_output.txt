@@ -1,0 +1,77 @@
+
+> week_4_automation@0.1.0 build
+> next build
+
+  ▲ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+
+Failed to compile.
+
+./src/app/api/airtable/route.ts
+39:21  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+103:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+123:50  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+155:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+258:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/api/history/route.ts
+1:10  Error: 'NextRequest' is defined but never used.  @typescript-eslint/no-unused-vars
+28:56  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+30:18  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+53:16  Error: 'e' is defined but never used.  @typescript-eslint/no-unused-vars
+68:16  Error: 'e' is defined but never used.  @typescript-eslint/no-unused-vars
+74:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/api/log/route.ts
+17:12  Error: 'err' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/api/publish/route.ts
+29:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/api/worker/route.ts
+76:26  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+82:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/history/page.tsx
+82:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/app/page.tsx
+23:10  Error: 'published' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/StepOne.tsx
+6:10  Error: 'logger' is defined but never used.  @typescript-eslint/no-unused-vars
+28:10  Error: 'loadingIndex' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/StepThree.tsx
+3:20  Error: 'useMemo' is defined but never used.  @typescript-eslint/no-unused-vars
+41:3  Error: 'onReset' is defined but never used.  @typescript-eslint/no-unused-vars
+207:23  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+394:13  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/StepTwo.tsx
+7:10  Error: 'logger' is defined but never used.  @typescript-eslint/no-unused-vars
+94:17  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/lib/logger.ts
+5:34  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+9:34  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+13:35  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+19:63  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+27:12  Error: 'e' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/lib/mock.ts
+11:10  Error: 'mockFetch' is defined but never used.  @typescript-eslint/no-unused-vars
+52:12  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+95:68  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+134:21  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+198:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+266:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+356:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+440:17  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+499:21  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/basic-features/eslint#disabling-rules
